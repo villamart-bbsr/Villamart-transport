@@ -1,13 +1,8 @@
 {
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
+    "rewrites": [
         {
-          "key": "Permissions-Policy",
-          "value": "camera=*, microphone=*"
+            "source": "/(.*)",
+            "destination": "/index.html"
         }
-      ]
-    }
-  ]
+    ]
 }
