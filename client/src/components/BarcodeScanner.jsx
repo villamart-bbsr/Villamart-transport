@@ -7,6 +7,7 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
   const [cameraPermission, setCameraPermission] = useState('pending');
   const [capturedImage, setCapturedImage] = useState(null);
   const [processingCapture, setProcessingCapture] = useState(false);
+  const [debugInfo, setDebugInfo] = useState({});
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const canvasRef = useRef(null);
@@ -66,6 +67,16 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
         setCameraPermission('granted');
         setScanning(true);
         console.log('Camera initialized successfully');
+        
+        // Debug info for mobile
+        if (videoRef.current) {
+          console.log('Video element ready:', {
+            videoWidth: videoRef.current.videoWidth,
+            videoHeight: videoRef.current.videoHeight,
+            readyState: videoRef.current.readyState,
+            paused: videoRef.current.paused
+          });
+        }
         
       } catch (err) {
         console.error('Camera initialization error:', err);
@@ -344,7 +355,16 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
                 </button>
               </div>
               
-              {/* Flash toggle for mobile */}
+              {/* Debug info - remove in production */}
+              {process.env.NODE_ENV === 'development' && videoRef.current && (
+                <div className="absolute top-4 left-4 bg-black bg-opacity-70 text-white text-xs p-2 rounded">
+                  Video: {videoRef.current.videoWidth}x{videoRef.current.videoHeight}
+                  <br />
+                  Ready: {videoRef.current.readyState}
+                  <br />
+                  Paused: {videoRef.current.paused ? 'Yes' : 'No'}
+                </div>
+              )}
               <div className="absolute top-4 right-4">
                 <button
                   onClick={() => {
