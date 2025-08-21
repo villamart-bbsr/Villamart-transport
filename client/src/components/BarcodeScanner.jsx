@@ -13,54 +13,123 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
   const canvasRef = useRef(null);
   const intervalRef = useRef(null);
 
-  // Request camera permission on component mount
+  // Enhanced camera permission check
   useEffect(() => {
     const requestCameraPermission = async () => {
       try {
         setCameraPermission('requesting');
-        setError(''); // Clear any previous errors
+        setError('');
         
-        // Check if getUserMedia is supported
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error('Camera API not supported');
+        // Enhanced browser support checks
+        const isHTTPS = window.location.protocol === 'https:' || window.location.hostname === 'localhost';
+        const hasMediaDevices = navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
+        
+        setDebugInfo({
+          isHTTPS,
+          hasMediaDevices,
+          userAgent: navigator.userAgent,
+          hostname: window.location.hostname,
+          protocol: window.location.protocol
+        });
+        
+        if (!isHTTPS) {
+          throw new Error('Camera access requires HTTPS. Please ensure your site is served over HTTPS.');
         }
         
-        // Mobile-optimized constraints
-        let constraints = {
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280, min: 640 },
-            height: { ideal: 720, min: 480 },
-            aspectRatio: { ideal: 1.0 }
-          }
-        };
+        if (!hasMediaDevices) {
+          throw new Error('Camera API not supported in this browser');
+        }
         
-        let stream;
-        try {
-          stream = await navigator.mediaDevices.getUserMedia(constraints);
-        } catch (err) {
-          // If environment camera fails, try with any camera
-          console.log('Environment camera not available, trying any camera:', err);
-          constraints = { video: true };
-          stream = await navigator.mediaDevices.getUserMedia(constraints);
+        // Enhanced mobile constraints with fallbacks
+        const constraints = [
+          // First try: Ideal mobile settings
+          {
+            video: {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1280, min: 640 },
+              height: { ideal: 720, min: 480 },
+              aspectRatio: { ideal: 1.0 }
+            }
+          },
+          // Second try: Environment camera without constraints
+          {
+            video: { facingMode: 'environment' }
+          },
+          // Third try: Any camera with basic constraints
+          {
+            video: {
+              width: { ideal: 640 },
+              height: { ideal: 480 }
+            }
+          },
+          // Last try: Any camera
+          { video: true }
+        ];
+        
+        let stream = null;
+        let lastError = null;
+        
+        for (const constraint of constraints) {
+          try {
+            console.log('Trying constraint:', constraint);
+            stream = await navigator.mediaDevices.getUserMedia(constraint);
+            console.log('Successfully got stream with constraint:', constraint);
+            break;
+          } catch (err) {
+            console.log('Constraint failed:', constraint, err);
+            lastError = err;
+            continue;
+          }
+        }
+        
+        if (!stream) {
+          throw lastError || new Error('Failed to get camera stream');
         }
         
         streamRef.current = stream;
         
-        // Wait for video element to be ready
+        // Enhanced video setup with better error handling
         if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play().catch(e => console.log('Play error:', e));
+          const video = videoRef.current;
+          video.srcObject = stream;
           
-          // Wait for video to load
+          // Set video attributes for mobile
+          video.setAttribute('playsinline', 'true');
+          video.setAttribute('muted', 'true');
+          video.setAttribute('autoplay', 'true');
+          
+          // Wait for video to be ready with timeout
           await new Promise((resolve, reject) => {
-            if (videoRef.current) {
-              videoRef.current.onloadedmetadata = () => {
-                videoRef.current?.play().then(resolve).catch(reject);
-              };
-              videoRef.current.onerror = reject;
+            const timeout = setTimeout(() => {
+              reject(new Error('Video load timeout'));
+            }, 10000);
+            
+            const onLoadedMetadata = () => {
+              clearTimeout(timeout);
+              video.removeEventListener('loadedmetadata', onLoadedMetadata);
+              video.removeEventListener('error', onError);
+              
+              video.play()
+                .then(() => {
+                  console.log('Video playing successfully');
+                  resolve();
+                })
+                .catch(reject);
+            };
+            
+            const onError = (err) => {
+              clearTimeout(timeout);
+              video.removeEventListener('loadedmetadata', onLoadedMetadata);
+              video.removeEventListener('error', onError);
+              reject(err);
+            };
+            
+            if (video.readyState >= 1) {
+              // Video already loaded
+              onLoadedMetadata();
             } else {
-              reject(new Error('Video element not available'));
+              video.addEventListener('loadedmetadata', onLoadedMetadata);
+              video.addEventListener('error', onError);
             }
           });
         }
@@ -69,39 +138,34 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
         setScanning(true);
         console.log('Camera initialized successfully');
         
-        // Debug info for mobile
-        if (videoRef.current) {
-          console.log('Video element ready:', {
-            videoWidth: videoRef.current.videoWidth,
-            videoHeight: videoRef.current.videoHeight,
-            readyState: videoRef.current.readyState,
-            paused: videoRef.current.paused
-          });
-        }
-        
       } catch (err) {
         console.error('Camera initialization error:', err);
         
-        // Check specific error types
+        let errorMessage = 'Unable to access camera. ';
+        
         if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
           setCameraPermission('denied');
-          setError('Camera permission was denied. Please allow camera access and refresh the page.');
+          errorMessage += 'Permission was denied. Please allow camera access and refresh the page.';
         } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
           setCameraPermission('denied');
-          setError('No camera found on this device.');
+          errorMessage += 'No camera found on this device.';
         } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
           setCameraPermission('denied');
-          setError('Camera is already in use by another application.');
+          errorMessage += 'Camera is already in use by another application.';
+        } else if (err.message.includes('HTTPS')) {
+          setCameraPermission('denied');
+          errorMessage += err.message;
         } else {
           setCameraPermission('denied');
-          setError(`Camera error: ${err.message || 'Unable to access camera'}. Please check your browser settings.`);
+          errorMessage += `${err.message || 'Unknown error occurred'}`;
         }
+        
+        setError(errorMessage);
       }
     };
     
     requestCameraPermission();
     
-    // Cleanup function
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
@@ -133,7 +197,7 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
     }
 
     intervalRef.current = setInterval(() => {
-      if (videoRef.current && videoRef.current.videoWidth > 0) {
+      if (videoRef.current && videoRef.current.videoWidth > 0 && videoRef.current.readyState >= 2) {
         detectBarcode();
       }
     }, 500);
@@ -160,10 +224,10 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
           formats: ['code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'qr_code']
         });
         
-        const barcodes = await barcodeDetector.detect(canvas);
+        const detectedBarcodes = await barcodeDetector.detect(canvas);
         
-        if (barcodes.length > 0) {
-          const detectedBarcode = barcodes[0].rawValue;
+        if (detectedBarcodes.length > 0) {
+          const detectedBarcode = detectedBarcodes[0].rawValue;
           handleScanResult(detectedBarcode);
         }
       } catch (err) {
@@ -181,7 +245,7 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
       if (!barcodes.includes(newBarcode)) {
         console.log('Adding barcode:', newBarcode);
         setBarcodes(prev => [...prev, newBarcode]);
-        setError(''); // Clear any previous errors
+        setError('');
         
         // Briefly pause scanning to prevent duplicate scans
         setScanning(false);
@@ -190,14 +254,14 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
     }
   };
 
-  // Fallback manual input
   const [manualBarcode, setManualBarcode] = useState('');
 
   const handleManualSubmit = (e) => {
+    e.preventDefault();
     if (manualBarcode.trim() && !barcodes.includes(manualBarcode.trim())) {
       setBarcodes(prev => [...prev, manualBarcode.trim()]);
       setManualBarcode('');
-      setError(''); // Clear any errors
+      setError('');
     }
   };
 
@@ -209,7 +273,7 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
     if (!videoRef.current || processingCapture) return;
     
     setProcessingCapture(true);
-    setScanning(false); // Stop live scanning
+    setScanning(false);
     
     try {
       const video = videoRef.current;
@@ -225,7 +289,7 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
     } catch (err) {
       console.error('Error capturing image:', err);
       setError('Failed to capture image. Please try again.');
-      setScanning(true); // Resume scanning on error
+      setScanning(true);
     }
     
     setProcessingCapture(false);
@@ -235,14 +299,9 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
     setProcessingCapture(true);
     
     try {
-      // In a real implementation, you would process the captured image
-      // For now, let's simulate processing and ask user to enter manually
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Clear captured image and show manual input
       setCapturedImage(null);
       setError('Please enter the barcode manually from the captured image.');
-      
     } catch (err) {
       setError('Failed to process captured image.');
     }
@@ -260,7 +319,6 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
     onScanned(barcodes);
   };
 
-  // Check if BarcodeDetector is supported
   const isBarcodeDetectorSupported = 'BarcodeDetector' in window;
 
   return (
@@ -278,42 +336,44 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
           </button>
         </div>
 
+        {/* Enhanced Debug Info */}
+        {debugInfo.protocol && (
+          <div className="mb-4 p-3 bg-gray-50 border border-gray-200 text-gray-600 text-xs rounded-md">
+            <strong>Debug Info:</strong><br />
+            Protocol: {debugInfo.protocol}<br />
+            HTTPS: {debugInfo.isHTTPS ? '✓' : '✗'}<br />
+            Media Devices: {debugInfo.hasMediaDevices ? '✓' : '✗'}<br />
+            Host: {debugInfo.hostname}
+          </div>
+        )}
+
         {/* Browser Support Warning */}
         {!isBarcodeDetectorSupported && (
           <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 text-yellow-700 text-sm rounded-md">
-            ⚠️ Automatic barcode detection is not supported in this browser. Please use manual input or capture and enter manually.
+            ⚠️ Automatic barcode detection not supported. Use manual input or capture method.
           </div>
         )}
 
-        {/* Camera permission states */}
+        {/* Enhanced Error Display */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-md">
+            <strong>Error:</strong> {error}
+            {debugInfo.protocol === 'http:' && debugInfo.hostname !== 'localhost' && (
+              <div className="mt-2 text-xs">
+                <strong>Solution:</strong> Ensure your site is served over HTTPS for camera access.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Camera States */}
         {(cameraPermission === 'pending' || cameraPermission === 'requesting') && (
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 text-blue-600 text-sm rounded-md">
-            📷 Requesting camera access... Please allow camera permission when prompted.
+            📷 Requesting camera access...
           </div>
         )}
 
-        {/* Camera denied or error */}
-        {cameraPermission === 'denied' && (
-          <div className="mb-4">
-            <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-md mb-2">
-              {error || "Camera access denied. Please enable camera permissions in your browser settings and refresh the page."}
-            </div>
-            <button
-              onClick={() => {
-                setCameraPermission('pending');
-                setError('');
-                // Re-trigger the camera permission request
-                const event = new Event('retry-camera');
-                window.dispatchEvent(event);
-              }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
-            >
-              Try Again
-            </button>
-          </div>
-        )}
-
-        {/* Camera is ready and scanning */}
+        {/* Camera View */}
         {scanning && cameraPermission === 'granted' && !capturedImage && (
           <div className="mb-4">
             <div className="aspect-square bg-gray-900 rounded-md overflow-hidden mb-2 relative" style={{ minHeight: 300 }}>
@@ -327,15 +387,16 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
                   width: '100%',
                   height: '100%',
                   objectFit: 'cover',
-                  background: '#222' // Add this line
+                  background: '#222'
                 }}
+                onLoadedMetadata={() => console.log('Video metadata loaded')}
+                onCanPlay={() => console.log('Video can play')}
+                onPlay={() => console.log('Video started playing')}
+                onError={(e) => console.error('Video error:', e)}
               />
-              <canvas
-                ref={canvasRef}
-                className="hidden"
-              />
+              <canvas ref={canvasRef} className="hidden" />
               
-              {/* Scanning overlay */}
+              {/* Scanning Overlay */}
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="w-48 h-48 border-2 border-green-400 border-dashed rounded-lg flex items-center justify-center animate-pulse">
                   <span className="text-green-400 text-xs font-medium bg-black bg-opacity-70 px-2 py-1 rounded">
@@ -349,7 +410,7 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
                 <button
                   onClick={captureBarcode}
                   disabled={processingCapture}
-                  className="bg-white rounded-full p-3 shadow-lg hover:shadow-xl transition-shadow"
+                  className="bg-white rounded-full p-3 shadow-lg hover:shadow-xl transition-shadow disabled:opacity-50"
                 >
                   <div className="w-12 h-12 rounded-full border-4 border-blue-500 flex items-center justify-center">
                     <div className="w-8 h-8 rounded-full bg-blue-500"></div>
@@ -357,35 +418,18 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
                 </button>
               </div>
               
-              {/* Debug info - remove in production */}
-              {process.env.NODE_ENV === 'development' && videoRef.current && (
+              {/* Enhanced Video Debug Info */}
+              {videoRef.current && (
                 <div className="absolute top-4 left-4 bg-black bg-opacity-70 text-white text-xs p-2 rounded">
-                  Video: {videoRef.current.videoWidth}x{videoRef.current.videoHeight}
+                  Video: {videoRef.current.videoWidth || 0}x{videoRef.current.videoHeight || 0}
                   <br />
                   Ready: {videoRef.current.readyState}
                   <br />
                   Paused: {videoRef.current.paused ? 'Yes' : 'No'}
+                  <br />
+                  Current Time: {videoRef.current.currentTime?.toFixed(2) || 0}s
                 </div>
               )}
-              <div className="absolute top-4 right-4">
-                <button
-                  onClick={() => {
-                    // Toggle flashlight if supported
-                    if (streamRef.current) {
-                      const track = streamRef.current.getVideoTracks()[0];
-                      if (track && track.getCapabilities && track.getCapabilities().torch) {
-                        const constraints = { advanced: [{ torch: !track.getSettings().torch }] };
-                        track.applyConstraints(constraints).catch(console.error);
-                      }
-                    }
-                  }}
-                  className="bg-black bg-opacity-50 text-white rounded-full p-2"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                </button>
-              </div>
             </div>
             
             <div className="text-center">
@@ -395,7 +439,6 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
                   : "Tap the capture button to take a photo"
                 }
               </p>
-              {/* Camera status indicator */}
               <div className="flex items-center justify-center space-x-2 text-xs text-gray-500">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                 <span>Camera Active</span>
@@ -404,7 +447,7 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
           </div>
         )}
         
-        {/* Show captured image */}
+        {/* Captured Image Processing */}
         {capturedImage && (
           <div className="mb-4">
             <div className="aspect-square bg-gray-100 rounded-md overflow-hidden mb-2 relative">
@@ -413,14 +456,6 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
                 alt="Captured barcode" 
                 className="w-full h-full object-cover"
               />
-              <button
-                onClick={retryScanning}
-                className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-md"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
             </div>
             
             <div className="flex space-x-2">
@@ -441,14 +476,7 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
           </div>
         )}
 
-        {/* Error message - only show if not already showing camera permission error */}
-        {error && cameraPermission !== 'denied' && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-md">
-            {error}
-          </div>
-        )}
-
-        {/* Scanned Barcodes List */}
+        {/* Scanned Barcodes */}
         {barcodes.length > 0 && (
           <div className="mb-4">
             <h4 className="text-sm font-medium text-gray-900 mb-2">
@@ -477,27 +505,22 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
           <h4 className="text-sm font-medium text-gray-900 mb-2">
             Add barcode manually:
           </h4>
-          <div className="flex space-x-2">
+          <form onSubmit={handleManualSubmit} className="flex space-x-2">
             <input
               type="text"
               value={manualBarcode}
               onChange={(e) => setManualBarcode(e.target.value)}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter') {
-                  handleManualSubmit(e);
-                }
-              }}
               placeholder="Enter barcode number"
               className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
             />
             <button
-              onClick={handleManualSubmit}
-              disabled={!manualBarcode.trim()}
+              type="submit"
+              disabled={!manualBarcode.trim() || barcodes.includes(manualBarcode.trim())}
               className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Add
             </button>
-          </div>
+          </form>
         </div>
 
         {/* Action Buttons */}
@@ -514,6 +537,12 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
             className="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500"
           >
             Cancel
+          </button>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 text-sm"
+          >
+            Reload
           </button>
         </div>
       </div>
