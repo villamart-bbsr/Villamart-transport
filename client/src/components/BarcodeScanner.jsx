@@ -21,7 +21,11 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
   }, [cameraPermission]);
 
   useEffect(() => {
-    if (scanning && cameraPermission === 'granted') {
+    if (
+      scanning &&
+      cameraPermission === 'granted' &&
+      scannerRef.current // <-- Ensure ref is ready
+    ) {
       Quagga.init({
         inputStream: {
           type: "LiveStream",
@@ -65,15 +69,13 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
       if (Quagga && Quagga.stop) {
         try {
           Quagga.stop();
-        } catch (e) {
-          // Ignore errors if Quagga is not running
-        }
+        } catch (e) {}
       }
       if (Quagga && Quagga.offDetected) {
         Quagga.offDetected();
       }
     };
-  }, [scanning, cameraPermission, barcodes]);
+  }, [scanning, cameraPermission, barcodes, scannerRef.current]);
 
   const handleManualSubmit = () => {
     if (manualBarcode.trim() && !barcodes.includes(manualBarcode.trim())) {
@@ -114,7 +116,18 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
             ref={scannerRef}
             className="aspect-square bg-gray-900 rounded-md overflow-hidden mb-2 relative"
             style={{ minHeight: 300 }}
-          />
+          >
+            {/* Show a button if not scanning */}
+            {!scanning && (
+              <button
+                onClick={() => setScanning(true)}
+                className="absolute inset-0 m-auto bg-blue-600 text-white px-4 py-2 rounded"
+                style={{ top: '40%', left: '30%' }}
+              >
+                Start Camera
+              </button>
+            )}
+          </div>
           <div className="text-center">
             <p className="text-sm text-gray-600 mb-2">
               Position the barcode within the frame
