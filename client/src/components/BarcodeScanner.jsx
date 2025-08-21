@@ -318,7 +318,7 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
             <div className="aspect-square bg-gray-900 rounded-md overflow-hidden mb-2 relative">
               <video
                 ref={videoRef}
-                className="w-full h-full object-cover transform scale-x-[-1]"
+                className="w-full h-full object-cover"
                 playsInline
                 muted
                 autoPlay
