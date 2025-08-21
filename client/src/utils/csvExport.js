@@ -7,7 +7,7 @@ export const exportToCSV = (data, filename) => {
     'Distributor': entry.distributor,
     'Status': entry.inOut,
     'Location': entry.location,
-    'Barcode': entry.barcode,
+    'Barcodes': entry.barcodes ? entry.barcodes.join('; ') : entry.barcode || '',
     'Timestamp': new Date(entry.timestamp).toLocaleString()
   }));
 

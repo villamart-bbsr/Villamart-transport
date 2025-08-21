@@ -3,13 +3,13 @@ const Entry = require('../models/Entry');
 // Create new entry
 const createEntry = async (req, res) => {
   try {
-    const { distributor, inOut, location, barcode } = req.body;
+    const { distributor, inOut, location, barcodes } = req.body;
     const userName = req.user.name;
 
     // Validation
-    if (!distributor || !inOut || !location || !barcode) {
+    if (!distributor || !inOut || !location || !barcodes || barcodes.length === 0) {
       return res.status(400).json({ 
-        message: 'All fields are required: distributor, inOut, location, barcode' 
+        message: 'All fields are required: distributor, inOut, location, barcodes' 
       });
     }
 
@@ -19,7 +19,7 @@ const createEntry = async (req, res) => {
       distributor,
       inOut,
       location,
-      barcode
+      barcodes
     });
 
     await entry.save();
@@ -41,7 +41,7 @@ const getAllEntries = async (req, res) => {
     if (search) {
       filter.$or = [
         { userName: { $regex: search, $options: 'i' } },
-        { barcode: { $regex: search, $options: 'i' } }
+        { barcodes: { $regex: search, $options: 'i' } }
       ];
     }
     

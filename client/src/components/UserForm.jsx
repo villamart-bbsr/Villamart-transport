@@ -9,7 +9,7 @@ const UserForm = () => {
     distributor: '',
     inOut: '',
     location: '',
-    barcode: ''
+    barcodes: []
   });
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
@@ -21,8 +21,8 @@ const UserForm = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.distributor || !formData.inOut || !formData.location || !formData.barcode) {
-      setError('All fields are required');
+    if (!formData.distributor || !formData.inOut || !formData.location || formData.barcodes.length === 0) {
+      setError('All fields are required including at least one barcode');
       return;
     }
 
@@ -39,7 +39,7 @@ const UserForm = () => {
         distributor: '',
         inOut: '',
         location: '',
-        barcode: ''
+        barcodes: []
       });
       
       setTimeout(() => setSuccess(''), 3000);
@@ -51,8 +51,8 @@ const UserForm = () => {
   };
 
 
-  const handleBarcodeScanned = (barcode) => {
-    setFormData(prev => ({ ...prev, barcode }));
+  const handleBarcodeScanned = (barcodes) => {
+    setFormData(prev => ({ ...prev, barcodes }));
     setShowScanner(false);
   };
 
@@ -144,22 +144,33 @@ const UserForm = () => {
               {/* Barcode Scanner */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Barcode
+                  Barcodes ({formData.barcodes.length})
                 </label>
-                <div className="flex space-x-2">
-                  <input
-                    type="text"
-                    value={formData.barcode}
-                    onChange={(e) => setFormData(prev => ({ ...prev, barcode: e.target.value }))}
-                    placeholder="Scan or enter barcode"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
-                  />
+                <div className="space-y-2">
+                  {formData.barcodes.length > 0 && (
+                    <div className="max-h-32 overflow-y-auto space-y-1">
+                      {formData.barcodes.map((barcode, index) => (
+                        <div key={index} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-md">
+                          <span className="text-sm font-mono text-gray-800">{barcode}</span>
+                          <button
+                            type="button"
+                            onClick={() => setFormData(prev => ({ ...prev, barcodes: prev.barcodes.filter((_, i) => i !== index) }))}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={() => setShowScanner(true)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    Scan
+                    {formData.barcodes.length === 0 ? 'Add Barcodes' : 'Add More Barcodes'}
                   </button>
                 </div>
               </div>
@@ -197,6 +208,7 @@ const UserForm = () => {
         <BarcodeScanner
           onScanned={handleBarcodeScanned}
           onClose={() => setShowScanner(false)}
+          existingBarcodes={formData.barcodes}
         />
       )}
     </div>

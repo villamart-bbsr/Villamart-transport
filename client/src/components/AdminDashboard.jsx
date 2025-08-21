@@ -355,7 +355,7 @@ const AdminDashboard = () => {
                         {entry.location}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">
-                        {entry.barcode}
+                        {entry.barcodes ? entry.barcodes.join(', ') : entry.barcode || ''}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {formatDate(entry.timestamp)}

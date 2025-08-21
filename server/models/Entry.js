@@ -21,10 +21,10 @@ const EntrySchema = new mongoose.Schema({
     required: true,
     trim: true
   },
-  barcode: {
+  barcodes: [{
     type: String,
     required: true
-  },
+  }],
   timestamp: {
     type: Date,
     default: Date.now
