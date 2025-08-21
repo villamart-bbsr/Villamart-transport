@@ -24,10 +24,13 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
           throw new Error('Camera API not supported');
         }
         
-        // Try with basic constraints first
+        // Mobile-optimized constraints
         let constraints = {
           video: {
-            facingMode: 'environment'
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280, min: 640 },
+            height: { ideal: 720, min: 480 },
+            aspectRatio: { ideal: 1.0 }
           }
         };
         
@@ -301,12 +304,18 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
         {/* Camera is ready and scanning */}
         {scanning && cameraPermission === 'granted' && !capturedImage && (
           <div className="mb-4">
-            <div className="aspect-square bg-gray-100 rounded-md overflow-hidden mb-2 relative">
+            <div className="aspect-square bg-gray-900 rounded-md overflow-hidden mb-2 relative">
               <video
                 ref={videoRef}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover transform scale-x-[-1]"
                 playsInline
                 muted
+                autoPlay
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover'
+                }}
               />
               <canvas
                 ref={canvasRef}
@@ -314,32 +323,62 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
               />
               
               {/* Scanning overlay */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-48 h-48 border-2 border-green-500 border-dashed rounded-lg flex items-center justify-center">
-                  <span className="text-green-500 text-sm font-medium bg-black bg-opacity-50 px-2 py-1 rounded">
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-48 h-48 border-2 border-green-400 border-dashed rounded-lg flex items-center justify-center animate-pulse">
+                  <span className="text-green-400 text-xs font-medium bg-black bg-opacity-70 px-2 py-1 rounded">
                     Position barcode here
                   </span>
                 </div>
               </div>
               
               {/* Capture Button */}
-              <button
-                onClick={captureBarcode}
-                disabled={processingCapture}
-                className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-white rounded-full p-2 shadow-lg"
-              >
-                <div className="w-12 h-12 rounded-full border-4 border-blue-500 flex items-center justify-center">
-                  <div className="w-8 h-8 rounded-full bg-blue-500"></div>
-                </div>
-              </button>
+              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
+                <button
+                  onClick={captureBarcode}
+                  disabled={processingCapture}
+                  className="bg-white rounded-full p-3 shadow-lg hover:shadow-xl transition-shadow"
+                >
+                  <div className="w-12 h-12 rounded-full border-4 border-blue-500 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-full bg-blue-500"></div>
+                  </div>
+                </button>
+              </div>
+              
+              {/* Flash toggle for mobile */}
+              <div className="absolute top-4 right-4">
+                <button
+                  onClick={() => {
+                    // Toggle flashlight if supported
+                    if (streamRef.current) {
+                      const track = streamRef.current.getVideoTracks()[0];
+                      if (track && track.getCapabilities && track.getCapabilities().torch) {
+                        const constraints = { advanced: [{ torch: !track.getSettings().torch }] };
+                        track.applyConstraints(constraints).catch(console.error);
+                      }
+                    }
+                  }}
+                  className="bg-black bg-opacity-50 text-white rounded-full p-2"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                </button>
+              </div>
             </div>
             
-            <p className="text-sm text-gray-600 text-center">
-              {isBarcodeDetectorSupported 
-                ? "Position the barcode within the green frame for automatic detection" 
-                : "Tap the capture button to take a photo of the barcode"
-              }
-            </p>
+            <div className="text-center">
+              <p className="text-sm text-gray-600 mb-2">
+                {isBarcodeDetectorSupported 
+                  ? "Position the barcode within the green frame" 
+                  : "Tap the capture button to take a photo"
+                }
+              </p>
+              {/* Camera status indicator */}
+              <div className="flex items-center justify-center space-x-2 text-xs text-gray-500">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span>Camera Active</span>
+              </div>
+            </div>
           </div>
         )}
         
