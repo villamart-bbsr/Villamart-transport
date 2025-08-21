@@ -355,6 +355,15 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
 
   const isBarcodeDetectorSupported = 'BarcodeDetector' in window;
 
+  // Add this function inside your component
+  const forceVideoPlay = () => {
+    if (videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.load();
+      videoRef.current.play().catch(() => {});
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 m-4 max-w-md w-full max-h-[90vh] overflow-y-auto">
@@ -410,7 +419,11 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
         {/* Camera View */}
         {cameraPermission === 'granted' && !capturedImage && (
           <div className="mb-4">
-            <div className="aspect-square bg-gray-900 rounded-md overflow-hidden mb-2 relative" style={{ minHeight: 300 }}>
+            <div
+              className="aspect-square bg-gray-900 rounded-md overflow-hidden mb-2 relative"
+              style={{ minHeight: 300 }}
+              onClick={forceVideoPlay} // <-- Add this
+            >
               <video
                 ref={videoRef}
                 className="w-full h-full object-cover"
