@@ -50,6 +50,7 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
         // Wait for video element to be ready
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(e => console.log('Play error:', e));
           
           // Wait for video to load
           await new Promise((resolve, reject) => {
@@ -325,7 +326,8 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
                 style={{
                   width: '100%',
                   height: '100%',
-                  objectFit: 'cover'
+                  objectFit: 'cover',
+                  background: '#222' // Add this line
                 }}
               />
               <canvas
