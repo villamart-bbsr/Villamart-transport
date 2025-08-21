@@ -217,6 +217,15 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
     };
   }, [scanning]);
 
+  // Re-assign stream to video element when camera permission is granted
+  useEffect(() => {
+    if (cameraPermission === 'granted' && videoRef.current && streamRef.current) {
+      // Always re-assign stream to video element
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [cameraPermission, videoRef.current, streamRef.current]);
+
   const startBarcodeDetection = () => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
