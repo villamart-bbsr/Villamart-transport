@@ -91,46 +91,115 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
         // Enhanced video setup with better error handling
         if (videoRef.current) {
           const video = videoRef.current;
-          video.srcObject = stream;
           
-          // Set video attributes for mobile
+          // Force reload video element to ensure clean state
+          video.load();
+          
+          // Set stream after a brief delay to ensure element is ready
+          setTimeout(() => {
+            video.srcObject = stream;
+          }, 100);
+          
+          // Set video attributes for mobile compatibility
           video.setAttribute('playsinline', 'true');
           video.setAttribute('muted', 'true');
           video.setAttribute('autoplay', 'true');
+          video.setAttribute('webkit-playsinline', 'true');
+          video.muted = true;
+          video.playsInline = true;
+          video.autoplay = true;
           
-          // Wait for video to be ready with timeout
+          // Force video dimensions
+          video.style.width = '100%';
+          video.style.height = '100%';
+          video.style.objectFit = 'cover';
+          video.style.background = '#000';
+          
+          // Wait for video to be ready with timeout and multiple attempts
           await new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
-              reject(new Error('Video load timeout'));
-            }, 10000);
+              reject(new Error('Video load timeout after 15 seconds'));
+            }, 15000);
+            
+            let attempts = 0;
+            const maxAttempts = 5;
+            
+            const attemptPlay = async () => {
+              attempts++;
+              console.log(`Video play attempt ${attempts}/${maxAttempts}`);
+              
+              try {
+                // Ensure srcObject is set
+                if (!video.srcObject) {
+                  video.srcObject = stream;
+                }
+                
+                // Force play
+                await video.play();
+                
+                console.log('Video playing successfully', {
+                  videoWidth: video.videoWidth,
+                  videoHeight: video.videoHeight,
+                  readyState: video.readyState,
+                  currentTime: video.currentTime,
+                  paused: video.paused
+                });
+                
+                clearTimeout(timeout);
+                resolve();
+              } catch (err) {
+                console.log(`Play attempt ${attempts} failed:`, err);
+                
+                if (attempts >= maxAttempts) {
+                  clearTimeout(timeout);
+                  reject(new Error(`Failed to play video after ${maxAttempts} attempts: ${err.message}`));
+                } else {
+                  // Wait and try again
+                  setTimeout(attemptPlay, 1000);
+                }
+              }
+            };
             
             const onLoadedMetadata = () => {
-              clearTimeout(timeout);
-              video.removeEventListener('loadedmetadata', onLoadedMetadata);
-              video.removeEventListener('error', onError);
-              
-              video.play()
-                .then(() => {
-                  console.log('Video playing successfully');
-                  resolve();
-                })
-                .catch(reject);
+              console.log('Video metadata loaded', {
+                videoWidth: video.videoWidth,
+                videoHeight: video.videoHeight,
+                readyState: video.readyState
+              });
+              attemptPlay();
+            };
+            
+            const onCanPlay = () => {
+              console.log('Video can play');
+              attemptPlay();
             };
             
             const onError = (err) => {
+              console.error('Video element error:', err);
               clearTimeout(timeout);
-              video.removeEventListener('loadedmetadata', onLoadedMetadata);
-              video.removeEventListener('error', onError);
-              reject(err);
+              reject(new Error(`Video element error: ${err.message || 'Unknown error'}`));
             };
             
+            // Add event listeners
+            video.addEventListener('loadedmetadata', onLoadedMetadata, { once: true });
+            video.addEventListener('canplay', onCanPlay, { once: true });
+            video.addEventListener('error', onError, { once: true });
+            
+            // Check if already ready
             if (video.readyState >= 1) {
-              // Video already loaded
               onLoadedMetadata();
-            } else {
-              video.addEventListener('loadedmetadata', onLoadedMetadata);
-              video.addEventListener('error', onError);
+            } else if (video.readyState >= 2) {
+              onCanPlay();
             }
+            
+            // Cleanup function
+            const cleanup = () => {
+              video.removeEventListener('loadedmetadata', onLoadedMetadata);
+              video.removeEventListener('canplay', onCanPlay);
+              video.removeEventListener('error', onError);
+            };
+            
+            timeout.addEventListener('timeout', cleanup);
           });
         }
         
@@ -257,7 +326,6 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
   const [manualBarcode, setManualBarcode] = useState('');
 
   const handleManualSubmit = (e) => {
-    e.preventDefault();
     if (manualBarcode.trim() && !barcodes.includes(manualBarcode.trim())) {
       setBarcodes(prev => [...prev, manualBarcode.trim()]);
       setManualBarcode('');
@@ -374,7 +442,7 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
         )}
 
         {/* Camera View */}
-        {scanning && cameraPermission === 'granted' && !capturedImage && (
+        {cameraPermission === 'granted' && !capturedImage && (
           <div className="mb-4">
             <div className="aspect-square bg-gray-900 rounded-md overflow-hidden mb-2 relative" style={{ minHeight: 300 }}>
               <video
@@ -383,33 +451,82 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
                 playsInline
                 muted
                 autoPlay
+                webkit-playsinline="true"
                 style={{
                   width: '100%',
                   height: '100%',
                   objectFit: 'cover',
-                  background: '#222'
+                  background: '#000',
+                  display: 'block'
                 }}
-                onLoadedMetadata={() => console.log('Video metadata loaded')}
+                onLoadedMetadata={(e) => {
+                  console.log('Video metadata loaded:', {
+                    videoWidth: e.target.videoWidth,
+                    videoHeight: e.target.videoHeight,
+                    readyState: e.target.readyState
+                  });
+                }}
                 onCanPlay={() => console.log('Video can play')}
                 onPlay={() => console.log('Video started playing')}
-                onError={(e) => console.error('Video error:', e)}
+                onError={(e) => {
+                  console.error('Video error:', e);
+                  setError(`Video playback error: ${e.target.error?.message || 'Unknown error'}`);
+                }}
+                onLoadStart={() => console.log('Video load started')}
+                onLoadedData={() => console.log('Video data loaded')}
+                onTimeUpdate={(e) => {
+                  // Only log occasionally to avoid spam
+                  if (Math.floor(e.target.currentTime) % 5 === 0) {
+                    console.log('Video time update:', e.target.currentTime);
+                  }
+                }}
               />
               <canvas ref={canvasRef} className="hidden" />
               
-              {/* Scanning Overlay */}
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-48 h-48 border-2 border-green-400 border-dashed rounded-lg flex items-center justify-center animate-pulse">
-                  <span className="text-green-400 text-xs font-medium bg-black bg-opacity-70 px-2 py-1 rounded">
-                    Position barcode here
-                  </span>
+              {/* Video not loading fallback */}
+              {videoRef.current && (
+                videoRef.current.videoWidth === 0 || 
+                videoRef.current.readyState < 2 || 
+                videoRef.current.paused
+              ) && (
+                <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
+                  <div className="text-center text-white">
+                    <div className="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-sm">Loading camera...</p>
+                    <p className="text-xs mt-2 opacity-70">
+                      {videoRef.current ? `State: ${videoRef.current.readyState}, Paused: ${videoRef.current.paused}` : 'Initializing...'}
+                    </p>
+                    <button
+                      onClick={() => {
+                        if (videoRef.current && streamRef.current) {
+                          videoRef.current.srcObject = streamRef.current;
+                          videoRef.current.play().catch(console.error);
+                        }
+                      }}
+                      className="mt-2 px-3 py-1 bg-blue-600 text-white rounded text-xs"
+                    >
+                      Retry Video
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
+              
+              {/* Scanning overlay - only show when video is actually playing */}
+              {scanning && videoRef.current && videoRef.current.videoWidth > 0 && !videoRef.current.paused && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="w-48 h-48 border-2 border-green-400 border-dashed rounded-lg flex items-center justify-center animate-pulse">
+                    <span className="text-green-400 text-xs font-medium bg-black bg-opacity-70 px-2 py-1 rounded">
+                      Position barcode here
+                    </span>
+                  </div>
+                </div>
+              )}
               
               {/* Capture Button */}
               <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
                 <button
                   onClick={captureBarcode}
-                  disabled={processingCapture}
+                  disabled={processingCapture || !videoRef.current || videoRef.current.videoWidth === 0}
                   className="bg-white rounded-full p-3 shadow-lg hover:shadow-xl transition-shadow disabled:opacity-50"
                 >
                   <div className="w-12 h-12 rounded-full border-4 border-blue-500 flex items-center justify-center">
@@ -419,17 +536,27 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
               </div>
               
               {/* Enhanced Video Debug Info */}
-              {videoRef.current && (
-                <div className="absolute top-4 left-4 bg-black bg-opacity-70 text-white text-xs p-2 rounded">
-                  Video: {videoRef.current.videoWidth || 0}x{videoRef.current.videoHeight || 0}
-                  <br />
-                  Ready: {videoRef.current.readyState}
-                  <br />
-                  Paused: {videoRef.current.paused ? 'Yes' : 'No'}
-                  <br />
-                  Current Time: {videoRef.current.currentTime?.toFixed(2) || 0}s
-                </div>
-              )}
+              <div className="absolute top-4 left-4 bg-black bg-opacity-70 text-white text-xs p-2 rounded max-w-48">
+                Stream: {streamRef.current ? '✓' : '✗'}
+                <br />
+                Video: {videoRef.current?.videoWidth || 0}x{videoRef.current?.videoHeight || 0}
+                <br />
+                Ready: {videoRef.current?.readyState || 0}/4
+                <br />
+                Paused: {videoRef.current?.paused ? 'Yes' : 'No'}
+                <br />
+                Time: {videoRef.current?.currentTime?.toFixed(1) || 0}s
+                <br />
+                SrcObject: {videoRef.current?.srcObject ? '✓' : '✗'}
+                {streamRef.current && (
+                  <>
+                    <br />
+                    Tracks: {streamRef.current.getTracks().length}
+                    <br />
+                    Active: {streamRef.current.getTracks().filter(t => t.enabled).length}
+                  </>
+                )}
+              </div>
             </div>
             
             <div className="text-center">
@@ -440,8 +567,17 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
                 }
               </p>
               <div className="flex items-center justify-center space-x-2 text-xs text-gray-500">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span>Camera Active</span>
+                <div className={`w-2 h-2 rounded-full ${
+                  videoRef.current && videoRef.current.videoWidth > 0 && !videoRef.current.paused 
+                    ? 'bg-green-500 animate-pulse' 
+                    : 'bg-red-500'
+                }`}></div>
+                <span>
+                  {videoRef.current && videoRef.current.videoWidth > 0 && !videoRef.current.paused 
+                    ? 'Camera Active' 
+                    : 'Camera Loading'
+                  }
+                </span>
               </div>
             </div>
           </div>
@@ -505,22 +641,27 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
           <h4 className="text-sm font-medium text-gray-900 mb-2">
             Add barcode manually:
           </h4>
-          <form onSubmit={handleManualSubmit} className="flex space-x-2">
+          <div className="flex space-x-2">
             <input
               type="text"
               value={manualBarcode}
               onChange={(e) => setManualBarcode(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  handleManualSubmit(e);
+                }
+              }}
               placeholder="Enter barcode number"
               className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
             />
             <button
-              type="submit"
+              onClick={handleManualSubmit}
               disabled={!manualBarcode.trim() || barcodes.includes(manualBarcode.trim())}
               className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Add
             </button>
-          </form>
+          </div>
         </div>
 
         {/* Action Buttons */}
