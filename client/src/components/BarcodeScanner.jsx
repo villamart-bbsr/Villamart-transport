@@ -88,118 +88,73 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
         
         streamRef.current = stream;
         
-        // Enhanced video setup with better error handling
+        // Direct video setup - fix the srcObject assignment issue
         if (videoRef.current) {
           const video = videoRef.current;
           
-          // Force reload video element to ensure clean state
-          video.load();
+          console.log('Setting up video element with stream:', stream);
           
-          // Set stream after a brief delay to ensure element is ready
-          setTimeout(() => {
-            video.srcObject = stream;
-          }, 100);
-          
-          // Set video attributes for mobile compatibility
-          video.setAttribute('playsinline', 'true');
-          video.setAttribute('muted', 'true');
-          video.setAttribute('autoplay', 'true');
-          video.setAttribute('webkit-playsinline', 'true');
+          // Set video attributes BEFORE assigning stream
+          video.setAttribute('playsinline', '');
+          video.setAttribute('muted', '');
+          video.setAttribute('autoplay', '');
+          video.setAttribute('webkit-playsinline', '');
           video.muted = true;
           video.playsInline = true;
           video.autoplay = true;
           
-          // Force video dimensions
-          video.style.width = '100%';
-          video.style.height = '100%';
-          video.style.objectFit = 'cover';
-          video.style.background = '#000';
+          // Directly assign the stream - this was the main issue
+          video.srcObject = stream;
           
-          // Wait for video to be ready with timeout and multiple attempts
+          console.log('Stream assigned to video, srcObject:', video.srcObject);
+          
+          // Wait for the video to load and play
           await new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
-              reject(new Error('Video load timeout after 15 seconds'));
-            }, 15000);
-            
-            let attempts = 0;
-            const maxAttempts = 5;
-            
-            const attemptPlay = async () => {
-              attempts++;
-              console.log(`Video play attempt ${attempts}/${maxAttempts}`);
-              
-              try {
-                // Ensure srcObject is set
-                if (!video.srcObject) {
-                  video.srcObject = stream;
-                }
-                
-                // Force play
-                await video.play();
-                
-                console.log('Video playing successfully', {
-                  videoWidth: video.videoWidth,
-                  videoHeight: video.videoHeight,
-                  readyState: video.readyState,
-                  currentTime: video.currentTime,
-                  paused: video.paused
-                });
-                
-                clearTimeout(timeout);
-                resolve();
-              } catch (err) {
-                console.log(`Play attempt ${attempts} failed:`, err);
-                
-                if (attempts >= maxAttempts) {
-                  clearTimeout(timeout);
-                  reject(new Error(`Failed to play video after ${maxAttempts} attempts: ${err.message}`));
-                } else {
-                  // Wait and try again
-                  setTimeout(attemptPlay, 1000);
-                }
-              }
-            };
+              reject(new Error('Video initialization timeout'));
+            }, 10000);
             
             const onLoadedMetadata = () => {
-              console.log('Video metadata loaded', {
+              console.log('Video metadata loaded:', {
                 videoWidth: video.videoWidth,
                 videoHeight: video.videoHeight,
                 readyState: video.readyState
               });
-              attemptPlay();
-            };
-            
-            const onCanPlay = () => {
-              console.log('Video can play');
-              attemptPlay();
+              
+              // Try to play the video
+              video.play()
+                .then(() => {
+                  console.log('Video playing successfully');
+                  clearTimeout(timeout);
+                  resolve();
+                })
+                .catch((playError) => {
+                  console.error('Video play error:', playError);
+                  // Even if play fails, continue - some browsers block autoplay
+                  clearTimeout(timeout);
+                  resolve();
+                });
             };
             
             const onError = (err) => {
-              console.error('Video element error:', err);
+              console.error('Video error:', err);
               clearTimeout(timeout);
-              reject(new Error(`Video element error: ${err.message || 'Unknown error'}`));
+              reject(err);
             };
             
-            // Add event listeners
+            // Add listeners
             video.addEventListener('loadedmetadata', onLoadedMetadata, { once: true });
-            video.addEventListener('canplay', onCanPlay, { once: true });
             video.addEventListener('error', onError, { once: true });
             
-            // Check if already ready
-            if (video.readyState >= 1) {
-              onLoadedMetadata();
-            } else if (video.readyState >= 2) {
-              onCanPlay();
+            // Force load if not already loading
+            if (video.readyState === 0) {
+              video.load();
             }
             
-            // Cleanup function
-            const cleanup = () => {
-              video.removeEventListener('loadedmetadata', onLoadedMetadata);
-              video.removeEventListener('canplay', onCanPlay);
-              video.removeEventListener('error', onError);
-            };
-            
-            timeout.addEventListener('timeout', cleanup);
+            // If already loaded, trigger immediately
+            if (video.readyState >= 1) {
+              setTimeout(onLoadedMetadata, 0);
+            }
           });
         }
         
@@ -498,12 +453,19 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
                     </p>
                     <button
                       onClick={() => {
+                        console.log('Manual retry clicked');
                         if (videoRef.current && streamRef.current) {
-                          videoRef.current.srcObject = streamRef.current;
-                          videoRef.current.play().catch(console.error);
+                          console.log('Reassigning stream to video element');
+                          const video = videoRef.current;
+                          video.srcObject = null; // Clear first
+                          setTimeout(() => {
+                            video.srcObject = streamRef.current;
+                            video.load();
+                            video.play().catch(console.error);
+                          }, 100);
                         }
                       }}
-                      className="mt-2 px-3 py-1 bg-blue-600 text-white rounded text-xs"
+                      className="mt-2 px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
                     >
                       Retry Video
                     </button>
