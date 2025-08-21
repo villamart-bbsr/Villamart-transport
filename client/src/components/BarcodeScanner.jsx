@@ -22,6 +22,8 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
         
         // Enhanced browser support checks
         const isHTTPS = window.location.protocol === 'https:' || window.location.hostname === 'localhost';
+        // Allow HTTP for Vercel preview or development environments
+        const allowHttp = window.location.hostname.endsWith('.vercel.app') || window.location.hostname === '127.0.0.1';
         const hasMediaDevices = navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
         
         setDebugInfo({
@@ -32,7 +34,7 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
           protocol: window.location.protocol
         });
         
-        if (!isHTTPS) {
+        if (!isHTTPS && !allowHttp) {
           throw new Error('Camera access requires HTTPS. Please ensure your site is served over HTTPS.');
         }
         
