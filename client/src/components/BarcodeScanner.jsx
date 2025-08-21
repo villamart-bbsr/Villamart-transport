@@ -315,7 +315,7 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
         {/* Camera is ready and scanning */}
         {scanning && cameraPermission === 'granted' && !capturedImage && (
           <div className="mb-4">
-            <div className="aspect-square  rounded-md overflow-hidden mb-2 relative">
+            <div className="aspect-square bg-gray-900 rounded-md overflow-hidden mb-2 relative" style={{ minHeight: 300 }}>
               <video
                 ref={videoRef}
                 className="w-full h-full object-cover"
