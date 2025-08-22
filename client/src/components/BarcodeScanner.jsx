@@ -12,13 +12,26 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
 
   useEffect(() => {
     if (cameraPermission === 'pending') {
-      setCameraPermission('requesting');
-      setError('');
-      // Quagga will handle permission errors
-      setCameraPermission('granted');
-      setScanning(true);
+      requestCameraPermission();
     }
   }, [cameraPermission]);
+
+  const requestCameraPermission = async () => {
+    try {
+      setCameraPermission('requesting');
+      setError('');
+      
+      // Request camera permission
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      stream.getTracks().forEach(track => track.stop()); // Stop the stream immediately
+      
+      setCameraPermission('granted');
+      setScanning(true);
+    } catch (err) {
+      setError('Camera permission denied. Please allow camera access and try again.');
+      setCameraPermission('denied');
+    }
+  };
 
   useEffect(() => {
     if (
@@ -42,7 +55,8 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
             "code_39_reader",
             "upc_reader",
             "upc_e_reader",
-            "codabar_reader"
+            "codabar_reader",
+            "qr_reader"
           ]
         }
       }, (err) => {
@@ -120,7 +134,7 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
             style={{ minHeight: 300 }}
           >
             {/* Show a button if not scanning */}
-            {!scanning && (
+            {!scanning && cameraPermission === 'granted' && (
               <button
                 onClick={() => setScanning(true)}
                 className="absolute inset-0 m-auto bg-blue-600 text-white px-4 py-2 rounded"
@@ -128,6 +142,21 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
               >
                 Start Camera
               </button>
+            )}
+            {cameraPermission === 'denied' && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <button
+                  onClick={() => setCameraPermission('pending')}
+                  className="bg-red-600 text-white px-4 py-2 rounded"
+                >
+                  Retry Camera Access
+                </button>
+              </div>
+            )}
+            {cameraPermission === 'requesting' && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-white">Requesting camera access...</div>
+              </div>
             )}
           </div>
           <div className="text-center">
