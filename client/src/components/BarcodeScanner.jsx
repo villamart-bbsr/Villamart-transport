@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
+import QrScanner from 'react-qr-scanner';
 
 const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
   const [error, setError] = useState('');
@@ -7,6 +8,7 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
   const [barcodes, setBarcodes] = useState(existingBarcodes);
   const [manualBarcode, setManualBarcode] = useState('');
   const [scanner, setScanner] = useState(null);
+  const [scannerType, setScannerType] = useState('html5'); // 'html5' or 'react'
 
   const scannerRef = useRef(null);
 
@@ -22,38 +24,53 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
   }, [scanning, scanner]);
 
   const initializeScanner = () => {
-    try {
-      const html5QrcodeScanner = new Html5QrcodeScanner(
-        "qr-reader",
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-          aspectRatio: 1.0,
-          supportedScanTypes: [
-            Html5QrcodeScanner.SCAN_TYPE_CAMERA
-          ]
-        },
-        false
-      );
+    if (scannerType === 'html5') {
+      try {
+        const html5QrcodeScanner = new Html5QrcodeScanner(
+          "qr-reader",
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0,
+            showTorchButtonIfSupported: true,
+            showZoomSliderIfSupported: true,
+            defaultZoomValueIfSupported: 2,
+            rememberLastUsedCamera: true,
+          },
+          false
+        );
 
-      html5QrcodeScanner.render(
-        (decodedText, decodedResult) => {
-          if (decodedText && !barcodes.includes(decodedText)) {
-            setManualBarcode(decodedText);
-            setError('');
-            setScanning(false);
-            html5QrcodeScanner.clear();
+        html5QrcodeScanner.render(
+          (decodedText, decodedResult) => {
+            console.log('HTML5 Scanned:', decodedText, decodedResult);
+            if (decodedText && !barcodes.includes(decodedText)) {
+              setManualBarcode(decodedText);
+              setError('');
+            }
+          },
+          (error) => {
+            // Handle scan errors silently
           }
-        },
-        (error) => {
-          // Handle scan errors silently
-        }
-      );
+        );
 
-      setScanner(html5QrcodeScanner);
-    } catch (err) {
-      setError('Failed to initialize scanner: ' + err.message);
+        setScanner(html5QrcodeScanner);
+      } catch (err) {
+        setError('HTML5 scanner failed, trying alternative scanner...');
+        setScannerType('react');
+      }
     }
+  };
+
+  const handleReactQrScan = (data) => {
+    if (data && !barcodes.includes(data)) {
+      console.log('React QR Scanned:', data);
+      setManualBarcode(data);
+      setError('');
+    }
+  };
+
+  const handleReactQrError = (err) => {
+    console.log('React QR Error:', err);
   };
 
 
@@ -103,30 +120,75 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
               <p className="text-sm text-gray-600 mt-2">
                 Click to start scanning QR codes and barcodes
               </p>
+              <div className="mt-4 flex justify-center space-x-2">
+                <button
+                  onClick={() => setScannerType('html5')}
+                  className={`px-3 py-1 text-xs rounded ${scannerType === 'html5' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
+                >
+                  HTML5 Scanner
+                </button>
+                <button
+                  onClick={() => setScannerType('react')}
+                  className={`px-3 py-1 text-xs rounded ${scannerType === 'react' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'}`}
+                >
+                  React Scanner
+                </button>
+              </div>
             </div>
           ) : (
             <div>
-              <div
-                id="qr-reader"
-                ref={scannerRef}
-                className="bg-gray-900 rounded-md overflow-hidden mb-2"
-                style={{ minHeight: 300 }}
-              ></div>
+              {scannerType === 'html5' ? (
+                <div
+                  id="qr-reader"
+                  ref={scannerRef}
+                  className="bg-gray-900 rounded-md overflow-hidden mb-2"
+                  style={{ minHeight: 300 }}
+                ></div>
+              ) : (
+                <div className="bg-gray-900 rounded-md overflow-hidden mb-2" style={{ minHeight: 300 }}>
+                  <QrScanner
+                    delay={300}
+                    onError={handleReactQrError}
+                    onScan={handleReactQrScan}
+                    style={{ width: '100%', height: '300px' }}
+                    constraints={{
+                      video: {
+                        facingMode: 'environment'
+                      }
+                    }}
+                  />
+                </div>
+              )}
               <div className="text-center">
                 <button
                   onClick={() => {
                     setScanning(false);
-                    if (scanner) {
+                    if (scanner && scannerType === 'html5') {
                       scanner.clear().catch(console.error);
                       setScanner(null);
                     }
                   }}
-                  className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors"
+                  className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors mr-2"
                 >
                   Stop Scanner
                 </button>
+                <button
+                  onClick={() => {
+                    setScannerType(scannerType === 'html5' ? 'react' : 'html5');
+                    if (scanner && scannerType === 'html5') {
+                      scanner.clear().catch(console.error);
+                      setScanner(null);
+                    }
+                  }}
+                  className="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700 transition-colors"
+                >
+                  Switch Scanner
+                </button>
                 <p className="text-sm text-gray-600 mt-2">
                   Position the QR code or barcode within the frame
+                </p>
+                <p className="text-xs text-gray-500">
+                  Using: {scannerType === 'html5' ? 'HTML5' : 'React'} Scanner
                 </p>
               </div>
             </div>
