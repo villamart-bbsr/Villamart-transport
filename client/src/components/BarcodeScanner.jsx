@@ -1,97 +1,61 @@
 import React, { useState, useEffect, useRef } from 'react';
-import Quagga from 'quagga'; // <-- Add this import
+import { Html5QrcodeScanner } from 'html5-qrcode';
 
 const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
   const [error, setError] = useState('');
   const [scanning, setScanning] = useState(false);
   const [barcodes, setBarcodes] = useState(existingBarcodes);
-  const [cameraPermission, setCameraPermission] = useState('pending');
   const [manualBarcode, setManualBarcode] = useState('');
+  const [scanner, setScanner] = useState(null);
 
   const scannerRef = useRef(null);
 
   useEffect(() => {
-    if (cameraPermission === 'pending') {
-      requestCameraPermission();
+    if (scanning && scannerRef.current && !scanner) {
+      initializeScanner();
     }
-  }, [cameraPermission]);
+    return () => {
+      if (scanner) {
+        scanner.clear().catch(console.error);
+      }
+    };
+  }, [scanning, scanner]);
 
-  const requestCameraPermission = async () => {
+  const initializeScanner = () => {
     try {
-      setCameraPermission('requesting');
-      setError('');
-      
-      // Request camera permission
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      stream.getTracks().forEach(track => track.stop()); // Stop the stream immediately
-      
-      setCameraPermission('granted');
-      setScanning(true);
+      const html5QrcodeScanner = new Html5QrcodeScanner(
+        "qr-reader",
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          aspectRatio: 1.0,
+          supportedScanTypes: [
+            Html5QrcodeScanner.SCAN_TYPE_CAMERA
+          ]
+        },
+        false
+      );
+
+      html5QrcodeScanner.render(
+        (decodedText, decodedResult) => {
+          if (decodedText && !barcodes.includes(decodedText)) {
+            setManualBarcode(decodedText);
+            setError('');
+            setScanning(false);
+            html5QrcodeScanner.clear();
+          }
+        },
+        (error) => {
+          // Handle scan errors silently
+        }
+      );
+
+      setScanner(html5QrcodeScanner);
     } catch (err) {
-      setError('Camera permission denied. Please allow camera access and try again.');
-      setCameraPermission('denied');
+      setError('Failed to initialize scanner: ' + err.message);
     }
   };
 
-  useEffect(() => {
-    if (
-      scanning &&
-      cameraPermission === 'granted' &&
-      scannerRef.current // <-- Ensure ref is ready
-    ) {
-      Quagga.init({
-        inputStream: {
-          type: "LiveStream",
-          target: scannerRef.current,
-          constraints: {
-            facingMode: "environment"
-          }
-        },
-        decoder: {
-          readers: [
-            "code_128_reader",
-            "ean_reader",
-            "ean_8_reader",
-            "code_39_reader",
-            "upc_reader",
-            "upc_e_reader",
-            "codabar_reader",
-            "qr_reader"
-          ]
-        }
-      }, (err) => {
-        if (err) {
-          setError("Camera initialization error: " + err.message);
-          setCameraPermission('denied');
-          return;
-        }
-        Quagga.start();
-      });
-
-      Quagga.onDetected((data) => {
-        const code = data.codeResult.code;
-        if (code && !barcodes.includes(code)) {
-          // Set the scanned code in the manual input field
-          setManualBarcode(code);
-          setError('');
-          setScanning(false);
-          // Stop scanning after successful detection
-          Quagga.stop();
-        }
-      });
-    }
-
-    return () => {
-      if (Quagga && Quagga.stop) {
-        try {
-          Quagga.stop();
-        } catch (e) {}
-      }
-      if (Quagga && Quagga.offDetected) {
-        Quagga.offDetected();
-      }
-    };
-  }, [scanning, cameraPermission, barcodes, scannerRef.current]);
 
   const handleManualSubmit = () => {
     if (manualBarcode.trim() && !barcodes.includes(manualBarcode.trim())) {
@@ -128,42 +92,45 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
         )}
 
         <div className="mb-4">
-          <div
-            ref={scannerRef}
-            className="aspect-square bg-gray-900 rounded-md overflow-hidden mb-2 relative"
-            style={{ minHeight: 300 }}
-          >
-            {/* Show a button if not scanning */}
-            {!scanning && cameraPermission === 'granted' && (
+          {!scanning ? (
+            <div className="text-center">
               <button
                 onClick={() => setScanning(true)}
-                className="absolute inset-0 m-auto bg-blue-600 text-white px-4 py-2 rounded"
-                style={{ top: '40%', left: '30%' }}
+                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
               >
-                Start Camera
+                Start QR/Barcode Scanner
               </button>
-            )}
-            {cameraPermission === 'denied' && (
-              <div className="absolute inset-0 flex items-center justify-center">
+              <p className="text-sm text-gray-600 mt-2">
+                Click to start scanning QR codes and barcodes
+              </p>
+            </div>
+          ) : (
+            <div>
+              <div
+                id="qr-reader"
+                ref={scannerRef}
+                className="bg-gray-900 rounded-md overflow-hidden mb-2"
+                style={{ minHeight: 300 }}
+              ></div>
+              <div className="text-center">
                 <button
-                  onClick={() => setCameraPermission('pending')}
-                  className="bg-red-600 text-white px-4 py-2 rounded"
+                  onClick={() => {
+                    setScanning(false);
+                    if (scanner) {
+                      scanner.clear().catch(console.error);
+                      setScanner(null);
+                    }
+                  }}
+                  className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors"
                 >
-                  Retry Camera Access
+                  Stop Scanner
                 </button>
+                <p className="text-sm text-gray-600 mt-2">
+                  Position the QR code or barcode within the frame
+                </p>
               </div>
-            )}
-            {cameraPermission === 'requesting' && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-white">Requesting camera access...</div>
-              </div>
-            )}
-          </div>
-          <div className="text-center">
-            <p className="text-sm text-gray-600 mb-2">
-              Position the barcode within the frame
-            </p>
-          </div>
+            </div>
+          )}
         </div>
 
         {barcodes.length > 0 && (
