@@ -6,6 +6,14 @@ const connectDB = require('./config/database');
 // Load environment variables
 require('dotenv').config();
 
+// Set default JWT_SECRET if not in environment
+if (!process.env.JWT_SECRET) {
+  process.env.JWT_SECRET = 'fallback_jwt_secret_key_for_development';
+}
+if (!process.env.ADMIN_SECRET) {
+  process.env.ADMIN_SECRET = 'fallback_admin_secret_key';
+}
+
 // Connect to MongoDB
 connectDB();
 
@@ -14,9 +22,9 @@ const app = express();
 // Middleware
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL, // Read from .env
+    origin: [process.env.FRONTEND_URL, '*'], // Allow Expo and web
     methods: ["GET", "POST", "PUT", "DELETE"],
-    credentials: true, // if using cookies or auth headers
+    credentials: true,
   })
 );
 app.use(express.json());

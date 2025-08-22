@@ -33,7 +33,7 @@ const createEntry = async (req, res) => {
 // Get all entries (admin only)
 const getAllEntries = async (req, res) => {
   try {
-    const { search, distributor, inOut, startDate, endDate } = req.query;
+    const { search, distributor, inOut, date } = req.query;
     
     let filter = {};
     
@@ -53,10 +53,14 @@ const getAllEntries = async (req, res) => {
       filter.inOut = inOut;
     }
     
-    if (startDate || endDate) {
-      filter.timestamp = {};
-      if (startDate) filter.timestamp.$gte = new Date(startDate);
-      if (endDate) filter.timestamp.$lte = new Date(endDate);
+    if (date) {
+      const selectedDate = new Date(date);
+      const startOfDay = new Date(selectedDate.setHours(0, 0, 0, 0));
+      const endOfDay = new Date(selectedDate.setHours(23, 59, 59, 999));
+      filter.timestamp = {
+        $gte: startOfDay,
+        $lte: endOfDay
+      };
     }
 
     const entries = await Entry.find(filter).sort({ timestamp: -1 });

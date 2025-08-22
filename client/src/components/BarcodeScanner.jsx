@@ -57,10 +57,12 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
       Quagga.onDetected((data) => {
         const code = data.codeResult.code;
         if (code && !barcodes.includes(code)) {
-          setBarcodes(prev => [...prev, code]);
+          // Set the scanned code in the manual input field
+          setManualBarcode(code);
           setError('');
           setScanning(false);
-          setTimeout(() => setScanning(true), 1500);
+          // Stop scanning after successful detection
+          Quagga.stop();
         }
       });
     }

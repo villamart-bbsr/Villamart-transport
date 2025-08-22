@@ -12,8 +12,7 @@ const AdminDashboard = () => {
     search: '',
     distributor: 'all',
     inOut: 'all',
-    startDate: '',
-    endDate: ''
+    date: ''
   });
 
   const distributors = ['Blinkit', 'Instamart', 'Zepto', 'BigBasket'];
@@ -59,17 +58,16 @@ const AdminDashboard = () => {
       filtered = filtered.filter(entry => entry.inOut === filters.inOut);
     }
 
-    // Date filters
-    if (filters.startDate) {
-      filtered = filtered.filter(entry =>
-        new Date(entry.timestamp) >= new Date(filters.startDate)
-      );
-    }
-
-    if (filters.endDate) {
-      filtered = filtered.filter(entry =>
-        new Date(entry.timestamp) <= new Date(filters.endDate + 'T23:59:59')
-      );
+    // Date filter
+    if (filters.date) {
+      const selectedDate = new Date(filters.date);
+      const startOfDay = new Date(selectedDate.setHours(0, 0, 0, 0));
+      const endOfDay = new Date(selectedDate.setHours(23, 59, 59, 999));
+      
+      filtered = filtered.filter(entry => {
+        const entryDate = new Date(entry.timestamp);
+        return entryDate >= startOfDay && entryDate <= endOfDay;
+      });
     }
 
     setFilteredEntries(filtered);
@@ -84,8 +82,7 @@ const AdminDashboard = () => {
       search: '',
       distributor: 'all',
       inOut: 'all',
-      startDate: '',
-      endDate: ''
+      date: ''
     });
   };
 
@@ -218,7 +215,7 @@ const AdminDashboard = () => {
         <div className="bg-white shadow rounded-lg mb-6">
           <div className="p-6">
             <h2 className="text-lg font-medium text-gray-900 mb-4">Filters</h2>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
                 <input
@@ -258,21 +255,11 @@ const AdminDashboard = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
                 <input
                   type="date"
-                  value={filters.startDate}
-                  onChange={(e) => handleFilterChange('startDate', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                <input
-                  type="date"
-                  value={filters.endDate}
-                  onChange={(e) => handleFilterChange('endDate', e.target.value)}
+                  value={filters.date}
+                  onChange={(e) => handleFilterChange('date', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-green-500 focus:border-green-500"
                 />
               </div>
