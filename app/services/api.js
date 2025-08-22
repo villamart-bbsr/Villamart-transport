@@ -3,10 +3,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // API URL configuration - switch between localhost and production
 const isDevelopment = __DEV__; // Expo's development flag
-const LOCALHOST_URL = 'http://10.175.241.226:5000/api'; // Your local IP
+// const LOCALHOST_URL = 'http://10.175.241.226:5000/api'; // Your local IP
 const PRODUCTION_URL = 'https://villamart-transport.onrender.com/api'; // Render URL
 
-const BASE_URL = isDevelopment ? LOCALHOST_URL : PRODUCTION_URL;
+const BASE_URL = PRODUCTION_URL; // Always use production URL since localhost is commented out
 
 export const api = axios.create({
   baseURL: BASE_URL,
