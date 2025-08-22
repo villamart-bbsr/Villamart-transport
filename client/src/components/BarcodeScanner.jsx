@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 import QrScanner from 'react-qr-scanner';
 
 const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
@@ -13,51 +13,60 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
   const scannerRef = useRef(null);
 
   useEffect(() => {
-    if (scanning && scannerRef.current && !scanner) {
-      initializeScanner();
+    if (scanning && scannerType === 'html5' && !scanner) {
+      initializeHtml5Scanner();
     }
     return () => {
-      if (scanner) {
-        scanner.clear().catch(console.error);
-      }
+      cleanupScanner();
     };
-  }, [scanning, scanner]);
+  }, [scanning, scannerType]);
 
-  const initializeScanner = () => {
-    if (scannerType === 'html5') {
+  const cleanupScanner = async () => {
+    if (scanner) {
       try {
-        const html5QrcodeScanner = new Html5QrcodeScanner(
-          "qr-reader",
-          {
-            fps: 10,
-            qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.0,
-            showTorchButtonIfSupported: true,
-            showZoomSliderIfSupported: true,
-            defaultZoomValueIfSupported: 2,
-            rememberLastUsedCamera: true,
-          },
-          false
-        );
-
-        html5QrcodeScanner.render(
-          (decodedText, decodedResult) => {
-            console.log('HTML5 Scanned:', decodedText, decodedResult);
-            if (decodedText && !barcodes.includes(decodedText)) {
-              setManualBarcode(decodedText);
-              setError('');
-            }
-          },
-          (error) => {
-            // Handle scan errors silently
-          }
-        );
-
-        setScanner(html5QrcodeScanner);
+        if (scanner.isScanning && scanner.isScanning()) {
+          await scanner.stop();
+        }
+        scanner.clear();
       } catch (err) {
-        setError('HTML5 scanner failed, trying alternative scanner...');
-        setScannerType('react');
+        console.log('Cleanup error:', err);
+      } finally {
+        setScanner(null);
       }
+    }
+  };
+
+  const initializeHtml5Scanner = async () => {
+    try {
+      const html5QrCode = new Html5Qrcode("qr-reader");
+      
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0
+      };
+
+      await html5QrCode.start(
+        { facingMode: "environment" },
+        config,
+        (decodedText, decodedResult) => {
+          console.log('HTML5 Scanned:', decodedText);
+          if (decodedText && !barcodes.includes(decodedText)) {
+            setManualBarcode(decodedText);
+            setError('');
+          }
+        },
+        (errorMessage) => {
+          // Scan errors are normal during scanning
+        }
+      );
+
+      setScanner(html5QrCode);
+      setError('');
+    } catch (err) {
+      console.error('HTML5 scanner failed:', err);
+      setError('HTML5 scanner failed: ' + err.message);
+      setScannerType('react');
     }
   };
 
@@ -161,24 +170,18 @@ const BarcodeScanner = ({ onScanned, onClose, existingBarcodes = [] }) => {
               )}
               <div className="text-center">
                 <button
-                  onClick={() => {
+                  onClick={async () => {
+                    await cleanupScanner();
                     setScanning(false);
-                    if (scanner && scannerType === 'html5') {
-                      scanner.clear().catch(console.error);
-                      setScanner(null);
-                    }
                   }}
                   className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors mr-2"
                 >
                   Stop Scanner
                 </button>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
+                    await cleanupScanner();
                     setScannerType(scannerType === 'html5' ? 'react' : 'html5');
-                    if (scanner && scannerType === 'html5') {
-                      scanner.clear().catch(console.error);
-                      setScanner(null);
-                    }
                   }}
                   className="bg-yellow-600 text-white px-4 py-2 rounded hover:bg-yellow-700 transition-colors"
                 >
